@@ -31,8 +31,14 @@ while True:
         # Receive a message from the client and store the received datagram and the address of the sender (tuple)
         message = serverSocket.recv(2048)
 
+        print(message)
+        print(i)
+        print(numPackets)
+
         # Decode the received message back into a string and make it upper case 
         messageList.append(copy.copy(message))
+
+        break
 
     # Reassemble the file from packets
     data = binaryFromPackets(messageList)

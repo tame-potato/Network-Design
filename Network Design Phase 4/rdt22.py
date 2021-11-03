@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 
+from socket import *
 from checksum import *
 from random import *
 from time import *
@@ -59,16 +60,23 @@ def randomCorruptAck(seq):
 # Timeout threshold realtime update calculation
 def timeoutUpdate(sampleRTT):
 
+    global estimatedRTTPrev
+    global devRTTPrev
+
     alpha = 1/8
 
     beta = 2 * alpha
 
+    # Calculate the running RTT average
     estimatedRTT = (1-alpha) * estimatedRTTPrev + alpha * sampleRTT
 
-    devRTT = (1-beta) * devRTTPrev + beta * abs(sampleRTT – estimatedRTT)
+    # Calculate the running average deviation from RTT
+    devRTT = (1-beta) * devRTTPrev + beta * abs(sampleRTT - estimatedRTT)
 
+    # Calculate safety factor
     safetyFactor = 4 * devRTT
 
+    # Calcuilate the timeout interval for this iteration
     timeoutInterval = estimatedRTT + safetyFactor
 
     estimatedRTTPrev = estimatedRTT
@@ -110,14 +118,14 @@ def receiveRDT(socket, seq, position = None):
         # Check msg checksum
         if checkRDT22(msg, seq):
 
-            response = randomCorruptAck(seq) 
+            ack = randomCorruptAck(seq) 
             socket.sendto(ack, clientAddress)
             print('Sending Ack with Seq ' + str(seq))
             return msg
 
         else:
 
-            response = randomCorruptAck(0 if seq else 1)
+            ack = randomCorruptAck(0 if seq else 1)
             socket.sendto(ack, clientAddress)
             print('Sending Ack with Seq ' + str(0 if seq else 1))
 
@@ -168,7 +176,7 @@ def sendRDT(socket, seq, pkt, addr, position = None):
             
         else:
 
-            print('Invalid ACK received for packet ' + str(i) + ' RESENDING')
+            print('Invalid ACK received for packet. RESENDING**')
  
 
 

@@ -1,17 +1,12 @@
 #! /usr/bin/env python3
 
-def add_byte(array):
-    x = 0
-    array.insert(0,x)
+def popit(arr):
+    arr[0] = 2
 
-seq = 1
+arr = [1,2,3]
 
-seq = seq.to_bytes(1,'big')
+print(~0-1)
 
-array = bytearray()
+popit(arr)
 
-print(array)
-
-add_byte(array)
-
-print(array)
+print(arr)
