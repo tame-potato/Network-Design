@@ -21,7 +21,7 @@ while True:
 
     print('\nAwaiting Connection...')
 
-    header = validatePkt(serverSocket, 0)
+    header = receiveRDT(serverSocket, 0)
 
     # Start timer
     timer = [time(), 0]
