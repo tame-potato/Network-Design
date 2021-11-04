@@ -26,13 +26,11 @@ while True:
     # Start timer
     timer = [time(), 0]
 
-    print(header)
-
     # Unpack header
     numPackets, name = getHeaderParts(header)
 
     # Loop so that the server checks for all the packets in the message
-    for i in range(1,numPackets+1):
+    for i in range(1,numPackets):
 
         # Generate correct sequence number for current packet
         seq = i%2

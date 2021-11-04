@@ -7,7 +7,7 @@ def packetizeBinary(filePath, packetSize):
     # Tested with png, jpg, and bmp images
 
     packet = bytearray()
-    packetList = bytearray()
+    packetList = []
 
     # Open file in reading and binary mode using the filePath
     with open(filePath, 'rb') as image:

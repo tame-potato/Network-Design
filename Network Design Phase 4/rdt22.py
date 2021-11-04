@@ -2,8 +2,8 @@
 
 from socket import *
 from checksum import *
-from random import *
-from time import *
+from random import seed, random
+from time import time
 from copy import copy
 
 # Probability of data corruption as a percentage
@@ -41,9 +41,14 @@ def AckRDT22(n):
 
 # Randomly corrupt the checksum of the given packet by flipping the bits
 def randomCorrupt(pkt):
+
+    out = copy(pkt)
+
     if random()*100 < CORRUPT_PROB:
-        pkt[0] = abs(~pkt[0]-1)
-        pkt[1] = abs(~pkt[1]-1)
+        out[0] = abs(~pkt[0]-1)
+        out[1] = abs(~pkt[1]-1)
+
+    return out
 
 
 
@@ -88,13 +93,17 @@ def timeoutUpdate(sampleRTT):
 # Check a packet for its sequence and checksum
 def checkRDT22(pkt, n):
 
-    if n == pkt.pop(2):
+    if n == pkt[2]:
+
         print('Sequence numbers match')
+
         if compareChecksum(pkt):
             print('Checksum matches')
+            pkt.pop(0)
             return True
         else:
             print('Checksums do not match')
+
     else:
         print('Sequence numbers do not match')
 
@@ -105,9 +114,11 @@ def checkRDT22(pkt, n):
 def receiveRDT(socket, seq, position = None):
 
     while True:
+
         # Receive a msg from the client and store the received datagram and the address of the sender (tuple)
         msg, clientAddress = socket.recvfrom(2048)
 
+        # Convert the bytes type object to a bytearray to make it mutable
         msg = bytearray(msg)
 
         if position is None:
@@ -130,16 +141,17 @@ def receiveRDT(socket, seq, position = None):
             print('Sending Ack with Seq ' + str(0 if seq else 1))
 
 def sendRDT(socket, seq, pkt, addr, position = None):
+    
+    # Add the sequence number and a checksum to the package
+    makeRDT22(pkt, seq)
 
-    msg = bytearray()
-                
     while True:
 
         # Set timeout value for the socket operations
         socket.settimeout(timeoutInterval)
 
         # Randomly corrupt the checksum of some packages
-        out = randomCorrupt(copy(pkt))
+        out = randomCorrupt(pkt)
 
         # Send out the packet
         socket.sendto(out, addr) 
@@ -150,7 +162,7 @@ def sendRDT(socket, seq, pkt, addr, position = None):
         if position is None:
             print('\nPacket Sent')
         else:
-            print('\nPacket ' + str(position[0]) + '/' + str(position[1]) + ' Sent')
+            print('\nPacket ' + str(position[0]+1) + '/' + str(position[1]) + ' Sent')
 
         # Receive an ack and store the received datagram and the address of the sender (tuple)
         try:
@@ -161,6 +173,9 @@ def sendRDT(socket, seq, pkt, addr, position = None):
 
         # Stop RTT timer
         stopRTT = time()
+
+        # Convert bytes object to bytearray to make it mutable
+        ack = bytearray(ack)
 
         # Check msg checksum
         if checkRDT22(ack, seq):
