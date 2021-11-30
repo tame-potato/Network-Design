@@ -2,7 +2,7 @@
 
 from socket import *
 from packet import binaryFromPackets, getHeaderParts
-from rdt22 import *
+from gbn import *
 from time import *
 from copy import copy
 
@@ -19,38 +19,10 @@ serverSocket.bind(('', serverPort))
 
 while True:
 
-    print('\nAwaiting Connection...')
+    name, data, transTime = receive_gbn(serverSocket)
 
-    header = receiveRDT(serverSocket, 0)
-
-    # Start timer
-    timer = [time(), 0]
-
-    # Unpack header
-    numPackets, name = getHeaderParts(header)
-
-    # Loop so that the server checks for all the packets in the message
-    for i in range(1,numPackets):
-
-        # Generate correct sequence number for current packet
-        seq = i%2
-
-        # Check for received message and loop until an in-order uncorrupted message has been received and Acked
-        pkt = receiveRDT(serverSocket, seq, (i, numPackets))
-
-        # Add a copy of the pacekt to the list of packets
-        pktList.append(copy(pkt))
-
-    # Stop Timer
-    timer[1] = time()
-
-    # Reassemble the file from packets
-    data = binaryFromPackets(pktList)
-    pktList.clear()
-
-    # Print information about the received file
-    print('\nReceived file ' + name + '  of size ' + str(len(data)) + ' bytes divided into ' + str(numPackets) + ' packets')
-    print('Transmission Time: ' + str(timer[1] - timer[0]) + ' seconds')
+    print('File ' + name + ' received succesfully!\n')
+    print('Transmission Time: ' + str(transTime) + ' seconds')
 
     # Save file
     newFile = open(name, 'wb')

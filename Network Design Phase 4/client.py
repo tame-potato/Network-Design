@@ -4,9 +4,10 @@ from socket import *
 from copy import copy
 from packet import packetizeBinary
 from time import *
-from rdt22 import *
+from gbn import *
 
-# TImeout threshold for socket operations in secs
+
+# Timeout threshold for socket operations in secs
 SOCK_TIMEOUT = 1
 
 # Obtain the name of the local host 
@@ -34,15 +35,8 @@ header = str(numPkts) + ' ' + imageSave
 
 # Send the number of packets and the name of the file as the first message so that the server knows when the transmission has ended
 pktList.insert(0, bytearray(header, 'utf-8'))
-
-# Loop over the list of packets and send them one by one in order
-for i in range(numPkts):
-
-    # Generate a sequence number for the given package
-    seq = i%2
-
-    # Send packet using RDT 3.0 protocol
-    sendRDT(clientSocket, seq, pktList[i], (serverName, serverPort), (i, numPkts))
+ 
+send_gbn(clientSocket, (serverName, serverPort), pktList)
 
 print('\nAll packets have been sent succesfully!')
 
