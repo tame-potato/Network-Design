@@ -19,11 +19,14 @@ serverPort = 12000
 # Assign a socket to the client using the arguments for a IPV4 address (AF_INET) and UDP protocol (SOCK_DGRAM) 
 clientSocket = socket(AF_INET, SOCK_DGRAM)
 
-# Rquest input from user for image to send
+# Request input from user for image to send
 image = input('Enter the name of the image you want to send (include file type extension): ')
 
+# Declare packet size
+pktSize = 1024
+
 # Open and packetize the image message
-pktList = packetizeBinary(image, 1024)
+pktList = packetizeBinary(image, pktSize)
 
 numPkts = len(pktList)
 
@@ -31,12 +34,12 @@ numPkts = len(pktList)
 imageSave = input('\nEnter the name the image will be saved under (include file type extension): ')
 
 # The header contains the number of packets in the message and its name separated by a space
-header = str(numPkts) + ' ' + imageSave
+header = str(numPkts) + ' ' + imageSave + ' ' + str(pktSize)
 
 # Send the number of packets and the name of the file as the first message so that the server knows when the transmission has ended
 pktList.insert(0, bytearray(header, 'utf-8'))
  
-send_gbn(clientSocket, (serverName, serverPort), pktList)
+send_gbn(clientSocket, (serverName, serverPort), pktList, pktSize)
 
 print('\nAll packets have been sent succesfully!')
 
