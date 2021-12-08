@@ -146,7 +146,6 @@ def check_seq(seqNum, nextSeqNum, pktList, index, start, size, msg):
                 print('Packet with sequence ' + str(seqNum) + ' received intact and stored.')
 
             else:
-
                 print('Packet with sequence ' + str(seqNum) + ' received as duplicate.')
 
     # If the seqNum is the same as the desired next seq num then update nextseqnum to the next empty spot on the pktList
@@ -559,6 +558,8 @@ def update_state_timeout(N, ssthresh, state, timers):
     # Remove unnecessary timers
     timers = timers[0:1]
 
+    timers[0] = None
+
     if state == 'congestion avoidance':
         
         state = 'slow start'
@@ -696,6 +697,9 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
                     # Update state and values
                     N, ssthresh, state, timers = update_state_timeout(N, ssthresh, state, timers)
 
+                    # Reset the timer:
+                    timers[0] = time()
+
                     print('Currently in ' + state + ' mode')
                     print('Window size is: ' + str(int(N)) + '\n')
 
@@ -734,13 +738,12 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
                     if nextSeqNum < base:
                         nextSeqNum = base
 
-                    print('New Base is ' + str(base) + ' and Next Sequence to Send is ' + str(nextSeqNum) + '\n')
-                    print('Currently in ' + state + ' mode')
-                    print('Window size is: ' + str(int(N)) + '\n')
+                    print('New Base is ' + str(base) + ' and Next Sequence to Send is ' + str(nextSeqNum))
 
                     if delta/pktLength <= int(N):
-                        # Recalculate timeout value
-                        timeOut, estimatedRTTPrev, devRTTPrev = time_out_update(currentTime - timers[ceil((delta/pktLength)-1)], estimatedRTTPrev, devRTTPrev)
+                        if timers[int((delta/pktLength)-1)] is not None:
+                            # Recalculate timeout value
+                            timeOut, estimatedRTTPrev, devRTTPrev = time_out_update(currentTime - timers[int((delta/pktLength)-1)], estimatedRTTPrev, devRTTPrev)
 
                     # Reorganize the timers for the packets in the window
                     for i in range(ceil(delta/pktLength)):
@@ -753,7 +756,7 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
                     # Check state and proceed accordingly
                     if state == 'slow start':
                         # Increase window size by 1
-                        N += 1
+                        N += 1 * delta/pktLength
 
                         # Update the size of the timers array to match the window size
                         timers.append(None)
@@ -767,11 +770,14 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
 
                     elif state == 'congestion avoidance':
                         # Increase window size by 1/N
-                        N += 1/N
+                        N += (1/N) * delta/pktLength
 
                         # Check if the window size has become larger than the number of available timers and increase accordingly
                         for i in range(int(N) - len(timers)):
                             timers.append(None)
+
+                    print('Currently in ' + state + ' mode')
+                    print('Window size is: ' + str(int(N)) + '\n')
 
     close_connection_client(clientSocket, addr, base, seqNum, timeOut)
         
