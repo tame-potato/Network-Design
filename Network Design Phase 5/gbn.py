@@ -10,7 +10,7 @@ from copy import copy
 from packet import binaryFromPackets, getHeaderParts
 
 # Probability of data corruption as a percentage
-CORRUPT_PROB = 0
+CORRUPT_PROB = 20
 
 # Loss Probability
 LOSS_PROB = 0
@@ -24,8 +24,8 @@ def randomCorrupt(pkt):
     out = copy(pkt)
 
     if random()*100 < CORRUPT_PROB:
-        out[0] = abs(~pkt[0]-1)
-        out[1] = abs(~pkt[1]-1)
+        out[0] = 0
+        out[1] = 0
 
     return out
 
