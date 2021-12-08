@@ -1,15 +1,8 @@
 #! /usr/bin/env python3
 
-import socket
+a= [1,2,3,4,5]
 
-s1, s2 = socket.socketpair()
+a = a[0:1]
 
-s1.send(b'Mary had a little lamb')
-s1.send(b'This is number 2')
-
-b1 = bytearray(50)
-
-s2.recv_into(b1, 22)
-
-print(b1)
+print(a)
 

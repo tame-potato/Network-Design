@@ -28,8 +28,8 @@ def randomCorrupt(pkt):
     out = copy(pkt)
 
     if random()*100 < CORRUPT_PROB:
-        out[0] = abs(~pkt[0]-1)
-        out[1] = abs(~pkt[1]-1)
+        out[0] = 0
+        out[1] = 0
 
     return out
 
@@ -543,11 +543,32 @@ def close_connection_server(socket, seq, timeOut):
     # Return socket to blocking mode
     socket.setblocking(1)
 
-                
+# Used in case of timeout. Check state and update values accordingly
+def update_state_timeout(N, ssthresh, state, timers):
+
+    # Check the current state and take the appropriate actions
+    # Make ssthresh half of N (round down) and if it ends up at 0, make it 1
+    ssthresh = int(N/2)
+
+    if ssthresh < 1:
+        ssthresh = 1
+
+    # Return N to 1
+    N = 1
+
+    # Remove unnecessary timers
+    timers = timers[0:1]
+
+    if state == 'congestion avoidance':
+        
+        state = 'slow start'
+
+    return (N, ssthresh, state, timers)
+
 def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
 
     # Set initial window size
-    N = 1 
+    N = 1
 
     # Generate timer array
     timers = [None] * N
@@ -579,6 +600,15 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
     # Set starting number of packet to be sent
     nextSeqNum = base
 
+    # Set initial state
+    state = 'slow start'
+
+    # Set initial ssthresh
+    ssthresh = None
+
+    # Set initial flow value to a number equal to 10 times the pkt length to start
+    flow = 10 * pktLength
+
     while base < finalBase:
 
         try:
@@ -586,7 +616,7 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
 
         except OSError as e:
 
-            if nextSeqNum < base+N*pktLength and nextSeqNum < finalBase:
+            if nextSeqNum <= base+(int(N)-1)*pktLength and nextSeqNum < finalBase and flow >= pktLength:
 
                 index = ceil((nextSeqNum-startSeq)/pktLength)
 
@@ -598,11 +628,16 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
                 # Send out the packet
                 clientSocket.sendto(pkt, addr) 
  
-                print('Packet with sequence number ' + str(nextSeqNum) + ' sent\n')
+                print('Packet with sequence number ' + str(nextSeqNum) + ' sent')
+                print('Currently in ' + state + ' mode')
+                print('Window size is: ' + str(int(N)) + '\n')
+                print('Current Timeout is: ' + str(timeOut) + '\n')
 
                 timers[ceil((nextSeqNum - base)/pktLength)] = time()
 
                 nextSeqNum += pktLength
+
+                flow -= pktLength
 
             currentTime = time()
 
@@ -610,7 +645,7 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
             if sr is True:
 
                 # Check timers for any timeouts using SR
-                for i in range(N):
+                for i in range(int(N)):
 
                     if timers[i] == None:
                         pass
@@ -631,17 +666,43 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
                         # Reset the timer for that base
                         timers[i] = time()
 
+                        # Update state and values
+                        N, ssthresh, state, timers = update_state_timeout(N, ssthresh, state, timers)
+
+                        print('Currently in ' + state + ' mode')
+                        print('Window size is: ' + str(int(N)) + '\n')
+
+                        # Check nextSeqNum and if it is larger than the last packet in the window update it to that packet
+                        if nextSeqNum > base + N*pktLength:
+                            nextSeqNum = base + N*pktLength
+
+
             # GBN Timeout
-            elif currentTime - timers[0] > timeOut:
+            elif timers[0] is not None:
+                if currentTime - timers[0] > timeOut:
 
-                nextSeqNum = base
+                    timeOutCount += 1
 
-                print('\n**TIMEOUT OCURRED IN GBN MODE, RESETTING NEXTSEQNUM TO BASE: ' + str(base) + '\n')
+                    nextSeqNum = base + pktLength
+
+                    print('\n**TIMEOUT OCURRED IN GBN MODE, RESETTING NEXTSEQNUM TO BASE: ' + str(nextSeqNum) + '\n')
+
+                    # Make the repeated packet into tcp format
+                    pkt = make_tcp_pkt(base, recvSeq, data = pktList[int((base-startSeq)/pktLength)])
+
+                    # Resend the timed out packet
+                    clientSocket.sendto(pkt, addr)
+
+                    # Update state and values
+                    N, ssthresh, state, timers = update_state_timeout(N, ssthresh, state, timers)
+
+                    print('Currently in ' + state + ' mode')
+                    print('Window size is: ' + str(int(N)) + '\n')
 
 
-            if base >= finalBase and timeOutCount > 5:
-                print('\nLast packet sent 6 times, ASSUMING RECEIVED, EXITING!')
-                break
+                if base >= finalBase and timeOutCount > 5:
+                    print('\nLast packet sent 6 times, ASSUMING RECEIVED, EXITING!')
+                    break
 
         else:
 
@@ -674,9 +735,12 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
                         nextSeqNum = base
 
                     print('New Base is ' + str(base) + ' and Next Sequence to Send is ' + str(nextSeqNum) + '\n')
+                    print('Currently in ' + state + ' mode')
+                    print('Window size is: ' + str(int(N)) + '\n')
 
-                    # Recalculate timeout value
-                    timeOut, estimatedRTTPrev, devRTTPrev = time_out_update(currentTime - timers[ceil((delta/pktLength)-1)], estimatedRTTPrev, devRTTPrev)
+                    if delta/pktLength <= int(N):
+                        # Recalculate timeout value
+                        timeOut, estimatedRTTPrev, devRTTPrev = time_out_update(currentTime - timers[ceil((delta/pktLength)-1)], estimatedRTTPrev, devRTTPrev)
 
                     # Reorganize the timers for the packets in the window
                     for i in range(ceil(delta/pktLength)):
@@ -685,6 +749,29 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
 
                     # Restart the time out counter
                     timeOutCount = 0
+
+                    # Check state and proceed accordingly
+                    if state == 'slow start':
+                        # Increase window size by 1
+                        N += 1
+
+                        # Update the size of the timers array to match the window size
+                        timers.append(None)
+
+                        # Check if it meets the requirement to change state
+                        if ssthresh is not None:
+
+                            if N >= ssthresh:
+
+                                state = 'congestion avoidance'
+
+                    elif state == 'congestion avoidance':
+                        # Increase window size by 1/N
+                        N += 1/N
+
+                        # Check if the window size has become larger than the number of available timers and increase accordingly
+                        for i in range(int(N) - len(timers)):
+                            timers.append(None)
 
     close_connection_client(clientSocket, addr, base, seqNum, timeOut)
         
@@ -701,40 +788,70 @@ def receive_gbn(socket):
 
     print('Sender random initial sequence number is: ' + str(startSenderSeq) + '\n')
 
+    # Initialize a buffer
+    buffer = bytearray((pktSize + HEADER_SIZE) * 10)
+
     # Initialize the expected next sequence number to the starting sequence for the sender
     nextSeqNum = startSenderSeq
 
     # Start transmission timer
     start = time()
+
+    # Current buffer position
+    buffIndex = 0
+
+    # Set socket to non-blocking
+    socket.setblocking(0)
     
     while nextSeqNum < numPkts*pktSize+startSenderSeq:
 
-        # Receive a msg from the client and store the received datagram
-        msg, clientAddress = socket.recvfrom(2048)
+        try:
 
-        # Artificially drop the ack packet for testing purposes
-        if random()*100 < LOSS_PROB:
-            continue
+            # Receive a msg from the client and store the received datagram
+            numRead, clientAddress = socket.recvfrom_into(memoryview(buffer)[buffIndex:])
+
+        except OSError as e:
+
+            if buffIndex >= pktSize + HEADER_SIZE or nextSeqNum + pktSize == numPkts*pktSize+startSenderSeq:
+
+                # Grab first message within buffer
+                msg = [buffer.pop(0) for i in range(pktSize + HEADER_SIZE)]
+                [buffer.append(0) for i in range(pktSize + HEADER_SIZE)]
+                buffIndex -= pktSize + HEADER_SIZE
+                buffSpace = len(buffer) - buffIndex
+
+                # Convert the bytes type object to a bytearray to make it mutable
+                msg = bytearray(msg)
+
+                # Check integrity of msg
+                senderSeq, recvSeq, flow = check_tcp(msg)
+
+                # Calculate received packet index
+                if senderSeq != None:
+
+                    # Generate an index for the storage list with base 0
+                    index = ceil((senderSeq-startSenderSeq)/pktSize)
+
+                    # Check the sequence of message and add to the pktList if first time message is received
+                    nextSeqNum = check_seq(senderSeq, nextSeqNum, pktList, index, startSenderSeq, pktSize, msg)
+
+                    # Send ack for the pkt before nextSeqNum as the last pkt received intact
+                    socket.sendto(make_tcp_pkt(recvSeq, nextSeqNum, syn = False, fin = False, finAck = False, flow = buffSpace, data = bytearray()), clientAddress)
+
+                    print('Ack sent acknowledging packet with sequence: ' + str(nextSeqNum-pktSize))
+                    print('Current free buffer space: ' + str(buffSpace) + '\n')
+            
         else:
-            # Convert the bytes type object to a bytearray to make it mutable
-            msg = bytearray(msg)
 
-            # Check integrity of msg
-            senderSeq, recvSeq, flow = check_tcp(msg)
-
-            # Calculate received packet index
-            if senderSeq != None:
-
-                # Generate an index for the storage list with base 0
-                index = ceil((senderSeq-startSenderSeq)/pktSize)
-
-                # Check the sequence of message and add to the pktList if first time message is received
-                nextSeqNum = check_seq(senderSeq, nextSeqNum, pktList, index, startSenderSeq, pktSize, msg)
-
-                # Send ack for the pkt before nextSeqNum as the last pkt received intact
-                socket.sendto(make_tcp_pkt(recvSeq, nextSeqNum, syn = False, fin = False, finAck = False, data = bytearray()), clientAddress)
-
-                print('Ack sent acknowledging packet with sequence: ' + str(nextSeqNum-pktSize) + '\n')
+            # Artificially drop the ack packet for testing purposes
+            if random()*100 < LOSS_PROB:
+                # Drop the read data
+                for i in range(buffIndex, numRead):
+                    buffer[i] = 0
+                continue
+            else:
+                buffIndex += numRead
+        
 
     close_connection_server(socket, nextSeqNum, timeOut)
 
