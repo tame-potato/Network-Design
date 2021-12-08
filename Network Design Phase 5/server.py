@@ -2,7 +2,7 @@
 
 from socket import *
 from packet import binaryFromPackets, getHeaderParts
-from gbn import *
+from tcp import *
 from time import *
 from copy import copy
 
@@ -19,7 +19,7 @@ serverSocket.bind(('', serverPort))
 
 while True:
 
-    name, data, transTime = receive_gbn(serverSocket)
+    name, data, transTime = receive_tcp(serverSocket)
 
     print('File ' + name + ' received succesfully!\n')
     print('Transmission Time: ' + str(transTime) + ' seconds')

@@ -566,7 +566,7 @@ def update_state_timeout(N, ssthresh, state, timers):
 
     return (N, ssthresh, state, timers)
 
-def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
+def send_tcp(clientSocket, addr, pktList, pktLength, sr=False):
 
     # Set initial window size
     N = 1
@@ -781,7 +781,7 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
 
     close_connection_client(clientSocket, addr, base, seqNum, timeOut)
         
-def receive_gbn(socket):
+def receive_tcp(socket):
 
     # Initialize timeout
     timeOut = 0.5
