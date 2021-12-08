@@ -632,7 +632,7 @@ def send_gbn(clientSocket, addr, pktList, pktLength, sr=False):
                 print('Packet with sequence number ' + str(nextSeqNum) + ' sent')
                 print('Currently in ' + state + ' mode')
                 print('Window size is: ' + str(int(N)) + '\n')
-                print('Current Timeout is: ' + str(timeOut) + '\n')
+                #print('Current Timeout is: ' + str(timeOut) + '\n')
 
                 timers[ceil((nextSeqNum - base)/pktLength)] = time()
 
