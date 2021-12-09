@@ -11,7 +11,7 @@ from math import ceil
 from packet import binaryFromPackets, getHeaderParts
 
 # Probability of data corruption as a percentage
-CORRUPT_PROB = 0
+CORRUPT_PROB = 20
 
 # Loss Probability
 LOSS_PROB = 0
@@ -25,13 +25,9 @@ seed(time())
 # Randomly corrupt the checksum of the given packet by flipping the bits
 def randomCorrupt(pkt):
 
-    out = copy(pkt)
-
     if random()*100 < CORRUPT_PROB:
-        out[0] = 0
-        out[1] = 0
-
-    return out
+        pkt[0] = 0
+        pkt[1] = 0
 
 # Make a 4 byte (32bit) sequence number
 def make_seq(seqNum):
@@ -64,10 +60,11 @@ def make_options(syn = False, fin = False, finAck = False):
     return options
 
 # Checks the checksum and options of the packet, returns None is either don't match or the seq number otherwise
-def check_tcp(pkt, syn = False, fin = False, finAck = False):
+def check_tcp(pkt, syn = False, fin = False, finAck = False, c = False):
 
-    # Artificially corrupt the packet for testing purposes
-    randomCorrupt(pkt)
+     # Artificially corrupt the packet for testing purposes
+    if c is False:
+        randomCorrupt(pkt)
     
     if compareChecksum(pkt):
 
@@ -195,7 +192,7 @@ def make_tcp_pkt(sequence, ackSeq = None, syn = False, fin = False, finAck = Fal
     if ackSeq is not None:
         ackBytes = make_seq(ackSeq)
     else:
-        ackBytes = bytearray()
+        ackBytes = bytearray(4)
 
     # Convert sequence number into a bytearray
     seqBytes = make_seq(sequence)
@@ -260,7 +257,7 @@ def handshake_client(socket, addr, timeOut, headerPkt):
             # Convert to byte array
             synAck = bytearray(synAck)
 
-            seq, ackSeq, flow = check_tcp(synAck, syn = True)
+            seq, ackSeq, flow = check_tcp(synAck, syn = True, c = True)
 
             if ackSeq == startSeq:
 
@@ -307,7 +304,7 @@ def handshake_client(socket, addr, timeOut, headerPkt):
             # Convert to byte array
             synAck = bytearray(synAck)
 
-            seq, ackSeq, flow = check_tcp(synAck)
+            seq, ackSeq, flow = check_tcp(synAck, c = True)
 
             if ackSeq == expectedSeq:
 
@@ -336,7 +333,7 @@ def handshake_server(socket):
         recvPkt = bytearray(recvPkt)
 
         # Check the integrity of the message
-        seq, ackSeq, flow = check_tcp(recvPkt, syn = True)
+        seq, ackSeq, flow = check_tcp(recvPkt, syn = True, c = True)
 
         # If message is valid generate 2nd handshake message and send
         if seq != None:
@@ -361,7 +358,7 @@ def handshake_server(socket):
         recvPkt = bytearray(recvPkt)
 
         # Check the integrity of the message
-        seq, ackSeq, flow = check_tcp(recvPkt)
+        seq, ackSeq, flow = check_tcp(recvPkt, c = True)
 
         # If message is valid generate 2nd handshake message and send
         if seq != None:
@@ -422,7 +419,7 @@ def close_connection_client(socket, addr, seq, ackSeq, timeOut):
             # Convert to byte array
             finAck = bytearray(finAck)
 
-            receiverSeq, ackSeq, flow = check_tcp(finAck, finAck = True)
+            receiverSeq, ackSeq, flow = check_tcp(finAck, finAck = True, c = True)
 
             if ackSeq == seq:
                 print('Close connection second message with FINACK option received.\n')
@@ -450,7 +447,7 @@ def close_connection_client(socket, addr, seq, ackSeq, timeOut):
             fin = bytearray(fin)
 
             # Check the integrity of the message
-            receiverSeq, ackSeq, flow = check_tcp(fin, fin = True)
+            receiverSeq, ackSeq, flow = check_tcp(fin, fin = True, c = True)
 
             # If message is valid generate finack message and send
             if ackSeq == seq:
@@ -509,7 +506,7 @@ def close_connection_server(socket, seq, timeOut):
             fin = bytearray(fin)
 
             # Check if the message is fin
-            senderSeq, ackSeq, flow = check_tcp(copy(fin), fin = True)
+            senderSeq, ackSeq, flow = check_tcp(copy(fin), fin = True, c = True)
 
             # If message is valid generate finack message and send
             if ackSeq == seq:
@@ -529,7 +526,7 @@ def close_connection_server(socket, seq, timeOut):
 
             else:
                 # Check if the message is finack
-                senderSeq, ackSeq, flow = check_tcp(copy(fin), finAck = True)
+                senderSeq, ackSeq, flow = check_tcp(copy(fin), finAck = True, c = True)
 
 
                 # If message is valid generate fin message and send
@@ -689,13 +686,16 @@ def send_tcp(clientSocket, addr, pktList, pktLength, sr=False):
                     print('\n**TIMEOUT OCURRED IN GBN MODE, RESETTING NEXTSEQNUM TO BASE: ' + str(nextSeqNum) + '\n')
 
                     # Make the repeated packet into tcp format
-                    pkt = make_tcp_pkt(base, recvSeq, data = pktList[int((base-startSeq)/pktLength)])
+                    pkt = make_tcp_pkt(base, ackSeq = recvSeq, data = pktList[int((base-startSeq)/pktLength)])
 
                     # Resend the timed out packet
                     clientSocket.sendto(pkt, addr)
 
                     # Update state and values
                     N, ssthresh, state, timers = update_state_timeout(N, ssthresh, state, timers)
+
+                    if timeOut > 0.03:
+                        timeOut = 0.03
 
                     # Reset the timer:
                     timers[0] = time()
