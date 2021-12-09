@@ -628,9 +628,12 @@ def send_tcp(clientSocket, addr, pktList, pktLength, sr=False):
  
                 print('Packet with sequence number ' + str(nextSeqNum) + ' sent')
                 print('Currently in ' + state + ' mode')
-                print('Window size is: ' + str(int(N)) + '\n')
+                #print('Window size is: ' + str(int(N)) + '\n')
                 #print('Current Timeout is: ' + str(timeOut) + '\n')
 
+                print(N)
+                print(len(timers))
+                print((nextSeqNum - base)/pktLength)
                 timers[ceil((nextSeqNum - base)/pktLength)] = time()
 
                 nextSeqNum += pktLength
@@ -720,8 +723,14 @@ def send_tcp(clientSocket, addr, pktList, pktLength, sr=False):
                 # Convert the bytes type object to a bytearray to make it mutable
                 ack = bytearray(ack)
 
+                prevFlow = flow
+
                 # Check integrity of the packet
                 recvSeq, seqNum, flow = check_tcp(ack)
+
+                # Prevent flow from becoming None
+                if flow is None:
+                    flow = prevFlow
 
                 # If the packet is intact and the acked packet is equal to or larger than the packet before the current base, its relevant
                 if seqNum != None and seqNum > base:
