@@ -11,7 +11,7 @@ from math import ceil
 from packet import binaryFromPackets, getHeaderParts
 
 # Probability of data corruption as a percentage
-CORRUPT_PROB = 20
+CORRUPT_PROB = 0
 
 # Loss Probability
 LOSS_PROB = 0
@@ -463,7 +463,7 @@ def close_connection_client(socket, addr, seq, ackSeq, timeOut):
                 break
 
 
-def close_connection_server(socket, seq, timeOut):
+def close_connection_server(socket, seq, nextSeqNum, timeOut):
 
     # Set socket to non-blocking in case it wasn't yet
     socket.setblocking(0)
@@ -509,7 +509,7 @@ def close_connection_server(socket, seq, timeOut):
             senderSeq, ackSeq, flow = check_tcp(copy(fin), fin = True, c = True)
 
             # If message is valid generate finack message and send
-            if ackSeq == seq:
+            if ackSeq != None:
 
                 print('Close connection first message with FIN option received.\n')
 
@@ -530,11 +530,24 @@ def close_connection_server(socket, seq, timeOut):
 
 
                 # If message is valid generate fin message and send
-                if ackSeq == seq:
+                if ackSeq != None:
 
                     print('Close connection fourth message with FINACK option received.\n')
 
                     break
+
+                else:
+
+                    # Check if the message is finack
+                    senderSeq, ackSeq, flow = check_tcp(copy(fin), c = True)
+
+                    if ackSeq != None:
+
+                        pkt = make_tcp_pkt(seq, nextSeqNum)
+
+                        socket.sendto(pkt, addr)
+
+                        
 
     # Return socket to blocking mode
     socket.setblocking(1)
@@ -575,8 +588,8 @@ def send_tcp(clientSocket, addr, pktList, pktLength, sr=False):
     timeOutCount = 0
 
     # Set timeout calculation variables starting values
-    timeOut = 0.5
-    estimatedRTTPrev = 1
+    timeOut = 0.03
+    estimatedRTTPrev = timeOut
     devRTTPrev = 0
 
     # Set socket to non-blocking
@@ -623,17 +636,18 @@ def send_tcp(clientSocket, addr, pktList, pktLength, sr=False):
                 # Make the next packet into tcp format
                 pkt = make_tcp_pkt(nextSeqNum, recvSeq, data = pktList[index])
 
+                if pktList[index] is pktList[-1] and len(pkt) < pktLength + HEADER_SIZE:
+                    for i in range(pktLength + HEADER_SIZE - len(pkt)):
+                        pkt.append(0)
+
                 # Send out the packet
                 clientSocket.sendto(pkt, addr) 
  
                 print('Packet with sequence number ' + str(nextSeqNum) + ' sent')
                 print('Currently in ' + state + ' mode')
                 #print('Window size is: ' + str(int(N)) + '\n')
-                #print('Current Timeout is: ' + str(timeOut) + '\n')
+                print('Current Timeout is: ' + str(timeOut) + '\n')
 
-                print(N)
-                print(len(timers))
-                print((nextSeqNum - base)/pktLength)
                 timers[ceil((nextSeqNum - base)/pktLength)] = time()
 
                 nextSeqNum += pktLength
@@ -688,17 +702,20 @@ def send_tcp(clientSocket, addr, pktList, pktLength, sr=False):
 
                     print('\n**TIMEOUT OCURRED IN GBN MODE, RESETTING NEXTSEQNUM TO BASE: ' + str(nextSeqNum) + '\n')
 
+                    index = int((base-startSeq)/pktLength)
+
                     # Make the repeated packet into tcp format
-                    pkt = make_tcp_pkt(base, ackSeq = recvSeq, data = pktList[int((base-startSeq)/pktLength)])
+                    pkt = make_tcp_pkt(base, ackSeq = recvSeq, data = pktList[index])
+
+                    if pktList[-1] is pktList[index] and len(pkt) < pktLength + HEADER_SIZE:
+                        for i in range(pktLength + HEADER_SIZE - len(pkt)):
+                            pkt.append(0)
 
                     # Resend the timed out packet
                     clientSocket.sendto(pkt, addr)
 
                     # Update state and values
                     N, ssthresh, state, timers = update_state_timeout(N, ssthresh, state, timers)
-
-                    if timeOut > 0.03:
-                        timeOut = 0.03
 
                     # Reset the timer:
                     timers[0] = time()
@@ -754,6 +771,9 @@ def send_tcp(clientSocket, addr, pktList, pktLength, sr=False):
                             # Recalculate timeout value
                             timeOut, estimatedRTTPrev, devRTTPrev = time_out_update(currentTime - timers[int((delta/pktLength)-1)], estimatedRTTPrev, devRTTPrev)
 
+                            if timeOut > 0.03:
+                                timeOut = 0.03
+
                     # Reorganize the timers for the packets in the window
                     for i in range(ceil(delta/pktLength)):
                         timers.pop(0)
@@ -767,8 +787,9 @@ def send_tcp(clientSocket, addr, pktList, pktLength, sr=False):
                         # Increase window size by 1
                         N += 1 * delta/pktLength
 
-                        # Update the size of the timers array to match the window size
-                        timers.append(None)
+                        for i in range(int(N) - len(timers)):
+                            # Update the size of the timers array to match the window size
+                            timers.append(None)
 
                         # Check if it meets the requirement to change state
                         if ssthresh is not None:
@@ -817,8 +838,10 @@ def receive_tcp(socket):
 
     # Set socket to non-blocking
     socket.setblocking(0)
+
+    finalSeq = numPkts*pktSize+startSenderSeq
     
-    while nextSeqNum < numPkts*pktSize+startSenderSeq:
+    while nextSeqNum < finalSeq:
 
         try:
 
@@ -827,7 +850,7 @@ def receive_tcp(socket):
 
         except OSError as e:
 
-            if buffIndex >= pktSize + HEADER_SIZE or nextSeqNum + pktSize == numPkts*pktSize+startSenderSeq:
+            if buffIndex >= pktSize + HEADER_SIZE:
 
                 # Grab first message within buffer
                 msg = [buffer.pop(0) for i in range(pktSize + HEADER_SIZE)]
@@ -868,7 +891,7 @@ def receive_tcp(socket):
                 buffIndex += numRead
         
 
-    close_connection_server(socket, nextSeqNum, timeOut)
+    close_connection_server(socket, recvSeq, nextSeqNum, timeOut)
 
     # Stop transmission timer
     stop = time()
