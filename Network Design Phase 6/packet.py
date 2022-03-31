@@ -57,13 +57,19 @@ def getHeaderParts(header):
     # Find the index of the first space
     spacePosition = header.find(' ')
 
-    # Extract everything after the space as the name
-    name = header[spacePosition+1:]
+    # Find the index for the second space
+    spacePosition2 = header.find(' ', spacePosition+1)
 
-    # Extract everything before the space as the number of packets
+    # Extract everything after between the spaces as the name
+    name = header[spacePosition+1:spacePosition2]
+
+    # Extract everything before the first space as the number of packets
     packetNumber = int(header[:spacePosition])
+
+    # Extract everything after the second space as the size of each pkt
+    pktSize = int(header[spacePosition2+1:])
     
-    return (packetNumber, name)
+    return (packetNumber, name, pktSize)
         
 
 

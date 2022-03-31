@@ -74,8 +74,8 @@ def compareChecksum(pkt):
 
     generatedChecksum = makeChecksum(pkt)
 
-    print('Generated Checksum ' + str(generatedChecksum))
-    print('Included Checksum ' + str(includedChecksum))
+    #print('Generated Checksum ' + str(generatedChecksum))
+    #print('Included Checksum ' + str(includedChecksum))
 
     return includedChecksum == generatedChecksum
 
